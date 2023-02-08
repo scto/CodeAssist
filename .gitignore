@@ -86,3 +86,9 @@ lint/generated/
 lint/outputs/
 lint/tmp/
 # lint/reports/
+
+# AndroidIDE files
+.androidide/
+.androidide/editor/
+.androidide/editor/openedFiles.json
+.androidide/editor/openedFiles.json.bak
