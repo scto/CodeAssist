@@ -2,9 +2,11 @@ package org.jetbrains.kotlin.com.intellij.openapi.roots;
 
 import androidx.annotation.NonNull;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 
-public abstract class ModuleRootManager {
+public abstract class ModuleRootManager implements ModuleRootModel {
 
     /**
      * Returns the module root manager instance for the specified module.
@@ -15,6 +17,14 @@ public abstract class ModuleRootManager {
     public static ModuleRootManager getInstance(@NonNull Module module) {
         return module.getComponent(ModuleRootManager.class);
     }
+
+    /**
+     * Returns the file index for the current module.
+     *
+     * @return the file index instance.
+     */
+    @NotNull
+    public abstract ModuleFileIndex getFileIndex();
 
     /**
      * Returns the list of modules on which the current module directly depends. The method does not traverse
@@ -40,4 +50,5 @@ public abstract class ModuleRootManager {
      * @return true if {@code module} is contained in the list of dependencies for the current module, false otherwise.
      */
     public abstract boolean isDependsOn(@NonNull Module module);
+
 }

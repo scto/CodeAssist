@@ -5,26 +5,22 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.children
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.transition.TransitionManager
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayout.OnTabSelectedListener
 import com.google.android.material.transition.MaterialFadeThrough
 import com.google.android.material.transition.MaterialSharedAxis
 import com.tyron.code.databinding.MainFragmentBinding
-import com.tyron.code.ui.editor.EditorTabUtil
-import com.tyron.code.ui.editor.EditorView
+import com.tyron.code.ui.editor.EditorFragment
+import com.tyron.code.ui.legacyEditor.EditorTabUtil
 import com.tyron.code.ui.file.FileViewModel
 import com.tyron.code.util.applySystemWindowInsets
-import com.tyron.code.util.viewModel
-import kotlinx.coroutines.flow.collect
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
 
 class MainFragmentV2 : Fragment() {
 
@@ -35,6 +31,9 @@ class MainFragmentV2 : Fragment() {
 
     private lateinit var binding: MainFragmentBinding
     private val toolbarManager by lazy { ToolbarManager() }
+
+    private val indexingUiFragment by lazy { BottomSheetDialogFragment() }
+    private val editorMap = mutableMapOf<VirtualFile, Fragment>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,13 +54,13 @@ class MainFragmentV2 : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         toolbarManager.bind(binding)
 
-        view.applySystemWindowInsets(false) { left, top, right, bottom ->
+        view.applySystemWindowInsets(false) { _, top, _, bottom ->
             binding.drawerMainContent.updatePadding(top = top, bottom = bottom)
         }
 
         binding.editorContainer.tablayout.addOnTabSelectedListener(object : OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
-               tab?.position?.let { viewModelV2.onTabSelected(it) }
+                tab?.position?.let { viewModelV2.onTabSelected(it) }
             }
 
             override fun onTabUnselected(tab: TabLayout.Tab?) {
@@ -77,30 +76,39 @@ class MainFragmentV2 : Fragment() {
         observeViewModel()
     }
 
-    fun observeViewModel() {
+    private fun observeViewModel() {
         lifecycleScope.launchWhenResumed {
             viewModelV2.currentTextEditorState.collect { textEditorState ->
                 if (textEditorState == null) {
                     binding.editorContainer.viewpager.removeAllViews()
+
+                    val editors = childFragmentManager.fragments.filter { it.tag != null }
+                        .filter { it.tag!!.startsWith("editor") }
+                    val transaction = childFragmentManager.beginTransaction()
+                    editors.forEach(transaction::hide)
+                    transaction.commit()
                     return@collect
                 }
 
-                val editorView = binding.editorContainer.viewpager.children.filterIsInstance(EditorView::class.java)
-                    .find { it.file == textEditorState.file }
-                if (editorView != null) {
-                    editorView.bringToFront()
-                    // view already selected
+                val fragment = editorMap.computeIfAbsent(textEditorState.file) {
+                    EditorFragment().apply {
+                        arguments = bundleOf(
+                            Pair("filePath", textEditorState.file.path)
+                        )
+                    }
+                }
+
+                if (fragment.isVisible) {
+                    // no need to do expensive work
                     return@collect
                 }
 
-                val editor = EditorView(
-                    requireContext(),
-                    viewModelV2.projectEnvironment.project,
-                    textEditorState
-                )
-                binding.editorContainer.viewpager.addView(editor, ViewGroup.LayoutParams(
-                    -1, -1
-                ))
+                val editors = childFragmentManager.fragments.filter { it.tag != null }
+                    .filter { it.tag!!.startsWith("editor") }
+                val transaction = childFragmentManager.beginTransaction()
+                editors.forEach(transaction::hide)
+                transaction.replace(binding.editorContainer.viewpager.id, fragment)
+                transaction.commit()
             }
         }
 
@@ -110,7 +118,10 @@ class MainFragmentV2 : Fragment() {
 
                 editorListState = it
 
-                TransitionManager.beginDelayedTransition(binding.editorContainer.viewpager, MaterialFadeThrough())
+                TransitionManager.beginDelayedTransition(
+                    binding.editorContainer.viewpager,
+                    MaterialFadeThrough()
+                )
                 if (it.editors.isEmpty()) {
                     binding.editorContainer.viewpager.removeAllViews()
                     binding.editorContainer.tablayout.removeAllTabs()
@@ -133,7 +144,23 @@ class MainFragmentV2 : Fragment() {
                 }
 
                 binding.progressbar.isIndeterminate = true
-                binding.progressbar.visibility = if (state.showProgressBar) View.VISIBLE else View.GONE
+                binding.progressbar.visibility =
+                    if (state.showProgressBar) View.VISIBLE else View.GONE
+            }
+        }
+
+        lifecycleScope.launchWhenResumed {
+            viewModelV2.indexingState.collect { indexingState ->
+                if (indexingState == null) {
+                    if (indexingUiFragment.isVisible) {
+                        indexingUiFragment.dismiss()
+                    }
+                    return@collect
+                }
+
+                if (indexingUiFragment.isDetached) {
+                    indexingUiFragment.show(childFragmentManager, "")
+                }
             }
         }
     }
