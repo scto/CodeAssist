@@ -5,6 +5,7 @@ import static com.tyron.code.indexing.ProjectIndexer.index;
 import com.tyron.code.project.CodeAssistJavaCoreProjectEnvironment;
 import com.tyron.code.sdk.SdkManagerImpl;
 import com.tyron.completion.progress.ProcessCanceledException;
+import com.tyron.completion.psi.search.PsiShortNamesCache;
 
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -13,11 +14,14 @@ import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.FileDocumentManagerBase;
 import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase;
-import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectFileIndex;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
@@ -26,6 +30,8 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.JavaStubElementTypes;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
@@ -37,6 +43,7 @@ import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileIdStorage;
+import org.jetbrains.kotlin.com.intellij.util.indexing.IndexingStamp;
 import org.jetbrains.kotlin.com.intellij.util.indexing.StorageException;
 import org.jetbrains.kotlin.com.intellij.util.indexing.contentQueue.IndexUpdateRunner;
 import org.jetbrains.kotlin.com.intellij.util.indexing.events.ChangedFilesCollector;
@@ -65,7 +72,7 @@ public class IndexingTest {
 
             @Override
             public void debug(@NonNls String s) {
-
+                System.out.println(s);
             }
 
             @Override
@@ -107,7 +114,8 @@ public class IndexingTest {
         });
         UtilKt.setIdeaIoUseFallback();
         IdeaStandaloneExecutionSetup.INSTANCE.doSetup();
-        System.setProperty("idea.home.path", Paths.get("").toAbsolutePath().getParent().resolve("TestHomePath").toString());
+        System.setProperty("idea.home.path",
+                Paths.get("").toAbsolutePath().getParent().resolve("TestHomePath").toString());
         System.setProperty("indexing.filename.over.vfs", "false");
         System.setProperty("intellij.idea.indices.debug", "true");
         Map<String, String> userProperties = Registry.getInstance().getUserProperties();
@@ -118,6 +126,7 @@ public class IndexingTest {
                 ((CoreStubIndex) StubIndex.getInstance()).flush();
                 ((CoreFileBasedIndex) FileBasedIndex.getInstance()).flush();
                 FileIdStorage.saveIds();
+                IndexingStamp.flushCaches();
                 FSRecords.dispose();
             } catch (IOException | StorageException e) {
                 throw new RuntimeException(e);
@@ -131,8 +140,11 @@ public class IndexingTest {
     }
 
     private static void initSdk(Project project) {
-        File classpathDir = new File("C:\\Users\\tyron scott\\AndroidStudioProjects\\CodeAssist" +
-                                     "-rollback\\java-completion\\src\\test\\resources\\classpath");
+        File classpathDir = Paths.get("")
+                .toAbsolutePath()
+                .getParent()
+                .resolve("java-completion/src/test" + "/resources/classpath")
+                .toFile();
         Sdk sdk = new Sdk("testSdk",
                 project,
                 classpathDir.getPath(),
@@ -213,8 +225,9 @@ public class IndexingTest {
         }, indicator);
 
 
-        Collection<PsiClass> activity = JavaShortClassNameIndex.getInstance()
-                .get("Activity", project, new CustomSearchScope(project));
+        JavaShortClassNameIndex shortClassNameIndex = JavaShortClassNameIndex.getInstance();
+        Collection<PsiClass> activity =
+                shortClassNameIndex.get("Activity", project, new CustomSearchScope(project));
         assert !activity.isEmpty();
 
         PsiClass activityClass = activity.iterator().next();
@@ -224,6 +237,24 @@ public class IndexingTest {
         assert superClass != null;
 
         System.out.println(superClass);
+
+        PsiShortNamesCache shortNamesCache = PsiShortNamesCache.getInstance(project);
+
+        assert shortNamesCache.getAllClassNames().length != 0;
+        assert shortNamesCache.getAllFieldNames().length != 0;
+        assert shortNamesCache.getAllMethodNames().length != 0;
+        assert shortNamesCache.getAllFieldNames().length != 0;
+
+        FileDocumentManagerBase fileDocumentManagerBase =
+                (FileDocumentManagerBase) FileDocumentManager.getInstance();
+        PsiDocumentManagerBase psiDocumentManagerBase =
+                (PsiDocumentManagerBase) PsiDocumentManagerBase.getInstance(project);
+        Document testDocument = new DocumentImpl("class Main { }");
+        testDocument.addDocumentListener(psiDocumentManagerBase);
+        testDocument.addDocumentListener(psiDocumentManagerBase.new PriorityEventCollector());
+
+        PsiFile psiFile = psiDocumentManagerBase.getPsiFile(testDocument);
+        System.out.println(psiFile);
     }
 
     private static class CustomSearchScope extends GlobalSearchScope {

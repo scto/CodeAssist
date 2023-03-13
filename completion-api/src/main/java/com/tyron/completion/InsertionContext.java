@@ -4,7 +4,7 @@ import androidx.annotation.Nullable;
 
 import com.tyron.completion.lookup.Lookup;
 import com.tyron.completion.lookup.LookupElement;
-import com.tyron.editor.snippet.Snippet;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
@@ -12,7 +12,6 @@ import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 
-import java.util.List;
 import java.util.Objects;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -24,19 +23,19 @@ public class InsertionContext {
     private final char myCompletionChar;
     private final LookupElement[] myElements;
     private final PsiFile myFile;
-    private final CodeEditor myEditor;
+    private final Editor myEditor;
     private Runnable myLaterRunnable;
     private boolean myAddCompletionChar;
 
     public InsertionContext(final OffsetMap offsetMap, final char completionChar, final LookupElement[] elements,
                             @NotNull final PsiFile file,
-                            @NotNull final CodeEditor editor, final boolean addCompletionChar) {
+                            @NotNull final Editor editor, final boolean addCompletionChar) {
         myOffsetMap = offsetMap;
         myCompletionChar = completionChar;
         myElements = elements;
         myFile = file;
         myEditor = editor;
-        setTailOffset(editor.getCursor().getLeft());
+        setTailOffset(editor.getCaret().getStart());
         myAddCompletionChar = addCompletionChar;
     }
 
@@ -54,7 +53,7 @@ public class InsertionContext {
     }
 
     @NotNull
-    public CodeEditor getEditor() {
+    public Editor getEditor() {
         return myEditor;
     }
 
@@ -64,8 +63,7 @@ public class InsertionContext {
 
     @NotNull
     public Document getDocument() {
-        return Objects.requireNonNull(EditorMemory.getUserData(myEditor,
-                EditorMemory.DOCUMENT_KEY));
+        return myEditor.getDocument();
     }
 
     public int getOffset(OffsetKey key) {
@@ -131,6 +129,6 @@ public class InsertionContext {
     }
 
     public InsertionContext forkByOffsetMap() {
-        return new InsertionContext(myOffsetMap.copyOffsets(EditorMemory.getUserData(myEditor, EditorMemory.DOCUMENT_KEY)), myCompletionChar, myElements, myFile, myEditor, myAddCompletionChar);
+        return new InsertionContext(myOffsetMap.copyOffsets(myEditor.getDocument()), myCompletionChar, myElements, myFile, myEditor, myAddCompletionChar);
     }
 }

@@ -1,6 +1,5 @@
 package com.tyron.code.ui.legacyEditor;
 
-import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
@@ -20,10 +19,13 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.widget.ThemeUtils;
 
 import com.tyron.common.util.AndroidUtilities;
+import com.tyron.completion.CompletionUtil;
+import com.tyron.completion.InsertionContext;
 import com.tyron.completion.PrefixMatcher;
 import com.tyron.completion.impl.CamelHumpMatcher;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
 import org.jetbrains.kotlin.com.intellij.util.containers.FList;
@@ -32,12 +34,59 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
+import io.github.rosemoe.sora.lang.completion.SimpleCompletionItem;
+import io.github.rosemoe.sora.text.Content;
+import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorCompletionAdapter;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora2.R;
 
 public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
+
+    private final Editor editor;
+
+    @Deprecated
+    public CodeAssistCompletionAdapter() {
+        throw new UnsupportedOperationException();
+    }
+
+    public CodeAssistCompletionAdapter(Editor editor) {
+        this.editor = editor;
+    }
+
+    public static class LookupElementWrapper extends SimpleCompletionItem {
+
+        private final LookupElement element;
+        private Editor editor;
+
+        public LookupElementWrapper(LookupElement element) {
+            super(0, "");
+            this.element = element;
+        }
+
+        public LookupElement getElement() {
+            return element;
+        }
+
+        @Override
+        public void performCompletion(@NonNull CodeEditor editor,
+                                      @NonNull Content text,
+                                      int line,
+                                      int column) {
+            element.performCompletion(this.editor);
+        }
+
+        @Override
+        public SimpleCompletionItem commit(int prefixLength, String commitText) {
+            throw new UnsupportedOperationException();
+        }
+
+        public void setEditor(Editor editor) {
+            this.editor = editor;
+        }
+    }
+
 
     @Override
     public int getItemHeight() {
@@ -58,7 +107,7 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
         }
 
         LookupElementPresentation presentation = new LookupElementPresentation();
-        LookupElement item = (LookupElement) getItem(pos);
+        LookupElement item = ((LookupElementWrapper) getItem(pos)).getElement();
         item.renderElement(presentation);
 
 
@@ -144,9 +193,11 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
     @Override
     public void attachValues(@NonNull EditorAutoCompletion window,
                              @NonNull List<CompletionItem> items) {
+
         List<CompletionItem> filteredElements = items.stream()
-                .filter(it -> it instanceof LookupElement)
-                .filter(it -> ((LookupElement) it).isValid())
+                .filter(it -> it instanceof LookupElementWrapper)
+                .map(it -> (LookupElementWrapper) it)
+                .peek(wrapper -> wrapper.setEditor(editor))
                 .collect(Collectors.toList());
         super.attachValues(window, filteredElements);
     }

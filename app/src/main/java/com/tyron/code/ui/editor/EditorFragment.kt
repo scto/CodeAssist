@@ -8,37 +8,15 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.tyron.code.databinding.NewEditorFragmentBinding
-import com.tyron.code.highlighter.JavaFileHighlighter
-import com.tyron.code.ui.legacyEditor.EditorView
-import io.github.rosemoe.sora.event.ContentChangeEvent
-import io.github.rosemoe.sora.lang.EmptyLanguage
-import io.github.rosemoe.sora.lang.analysis.AnalyzeManager
-import io.github.rosemoe.sora.lang.completion.CompletionPublisher
-import io.github.rosemoe.sora.text.CharPosition
-import io.github.rosemoe.sora.text.ContentReference
+import com.tyron.code.ui.legacyEditor.CodeAssistCompletionAdapter
+import io.github.rosemoe.sora.event.SelectionChangeEvent
 
 class EditorFragment : Fragment() {
 
     private val viewModel: EditorViewModel by viewModels()
 
+
     private lateinit var binding: NewEditorFragmentBinding
-
-    private val language = object : EmptyLanguage() {
-        val analyzeManager = EditorView.TestAnalyzeManager(JavaFileHighlighter())
-
-        override fun getAnalyzeManager(): AnalyzeManager {
-            return analyzeManager
-        }
-
-        override fun requireAutoComplete(
-            content: ContentReference,
-            position: CharPosition,
-            publisher: CompletionPublisher,
-            extraArguments: Bundle
-        ) {
-
-        }
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -65,16 +43,12 @@ class EditorFragment : Fragment() {
                     return@collect
                 }
 
-                binding.editorView.setText(editorState.editorContent)
-                binding.editorView.setEditorLanguage(language)
-                binding.editorView.subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
-                    viewModel.commit(
-                        event.action,
-                        event.changeStart.index,
-                        event.changeEnd.index,
-                        event.changedText
-                    )
+                binding.editorView.subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
+                    viewModel.handleCursorEvent(event);
                 }
+                binding.editorView.setAutoCompletionItemAdapter(CodeAssistCompletionAdapter(editorState.editor))
+                binding.editorView.setText(editorState.editorContent)
+                binding.editorView.setEditorLanguage(editorState.soraLanguage)
             }
         }
     }
@@ -112,5 +86,4 @@ class EditorFragment : Fragment() {
             binding.completionIndicatorContainer.visibility = View.VISIBLE
         }
     }
-
 }

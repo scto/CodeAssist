@@ -3,24 +3,20 @@ package com.tyron.completion.lookup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.completion.CompletionResult;
-import com.tyron.completion.CompletionService;
 import com.tyron.completion.CompletionUtil;
 import com.tyron.completion.EditorMemory;
 import com.tyron.completion.InsertionContext;
 import com.tyron.completion.PrefixMatcher;
-import com.tyron.completion.impl.BaseCompletionService;
 import com.tyron.completion.impl.CompletionContext;
-import com.tyron.completion.impl.CompletionServiceImpl;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolder;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderBase;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.ResolveResult;
 import org.jetbrains.kotlin.com.intellij.psi.SmartPsiElementPointer;
 
@@ -28,18 +24,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
-public abstract class LookupElement extends CompletionItemWithMatchLevel implements UserDataHolder {
+public abstract class LookupElement implements UserDataHolder {
 
     public static Key<PrefixMatcher> PREFIX_MATCHER_KEY = Key.create("prefix_matcher");
     private final UserDataHolderBase userDataHolderBase = new UserDataHolderBase();
 
     public LookupElement() {
-        super("");
+
     }
 
     @Override
@@ -115,20 +110,12 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
     }
 
 
-    @Override
-    public final void performCompletion(@NonNull CodeEditor editor,
-                                  @NonNull Content text,
-                                  @NonNull CharPosition position) {
-        super.performCompletion(editor, text, position);
-    }
 
-    @Override
-    public final void performCompletion(@NonNull CodeEditor editor,
-                                  @NonNull Content text,
-                                  int line,
-                                  int column) {
 
-        PsiElement insertedElement = EditorMemory.getUserData(editor, EditorMemory.INSERTED_KEY);
+
+    public final void performCompletion(@NonNull Editor editor) {
+
+        PsiElement insertedElement = editor.getUserData(EditorMemory.INSERTED_KEY);
         assert insertedElement != null;
         CompletionContext completionContext =
                 insertedElement.getUserData(CompletionContext.COMPLETION_CONTEXT_KEY);
@@ -139,7 +126,7 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
 
         String prefix = prefixMatcher.getPrefix();
 
-        int cursorStart = editor.getCursor().getLeft();
+        int cursorStart = editor.getCaret().getStart();
         int identifierStart = cursorStart - prefix.length();
 
         List<LookupElement> elements = Collections.emptyList();
@@ -153,11 +140,14 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
                 identifierStart + prefix.length(),
                 completionContext.getOffsetMap()
         );
-        editor.getText().delete(identifierStart, identifierStart + prefix.length());
+
+        WriteCommandAction.runWriteCommandAction(insertedElement.getProject(), "insert completion item", "null", () -> {
+            editor.getDocument().deleteString(identifierStart, identifierStart + prefix.length());
 
 
-        String lookupString = getLookupString();
-        editor.insertText(lookupString, lookupString.length());
+            String lookupString = getLookupString();
+            editor.getDocument().insertString(lookupString.length(), lookupString);
+        },  insertedElement.getContainingFile());
 
         handleInsert(context);
     }

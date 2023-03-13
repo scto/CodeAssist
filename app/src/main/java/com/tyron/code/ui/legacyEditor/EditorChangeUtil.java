@@ -11,17 +11,14 @@ import com.tyron.completion.impl.OffsetsInFile;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.util.EditorUtil;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
-import org.jetbrains.kotlin.com.intellij.openapi.application.WriteAction;
-import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
 import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.project.ProjectCoreUtil;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
@@ -30,7 +27,6 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiPackage;
 import org.jetbrains.kotlin.com.intellij.psi.impl.DocumentCommitThread;
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.PsiPackageImpl;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiFileImpl;
 import org.jetbrains.kotlin.com.intellij.reference.SoftReference;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
@@ -85,7 +81,7 @@ public class EditorChangeUtil {
 
     public static void performCompletionUnderIndicator(
             Project project,
-            CodeEditor editor,
+            Editor editor,
             CompletionPublisher publisher,
             Disposable completionSession) {
         publisher.setComparator((o1, o2) -> {
@@ -101,12 +97,12 @@ public class EditorChangeUtil {
         CompletionInitializationContext ctx =
                 CompletionInitializationUtil.createCompletionInitializationContext(project,
                         editor,
-                        editor.getCursor(),
+                        editor.getCaret(),
                         0,
                         CompletionType.SMART);
         CompletionProcess completionProcess = () -> true;
 
-        PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
+        PsiFile psiFile = editor.getUserData(EditorMemory.FILE_KEY);
         OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
 
         Supplier<? extends OffsetsInFile> supplier =
@@ -124,7 +120,7 @@ public class EditorChangeUtil {
                 .performCompletion(completionParameters, completionResult -> {
                     LookupElement lookupElement = completionResult.getLookupElement();
                     if (lookupElement.isValid()) {
-                        publisher.addItem(lookupElement);
+                        publisher.addItem(new CodeAssistCompletionAdapter.LookupElementWrapper(lookupElement));
 
                         lookupElement.putUserData(LookupElement.PREFIX_MATCHER_KEY,
                                 completionResult.getPrefixMatcher());

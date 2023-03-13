@@ -11,6 +11,8 @@ import com.tyron.completion.CompletionProcess;
 import com.tyron.completion.CompletionType;
 import com.tyron.completion.EditorMemory;
 import com.tyron.completion.OffsetMap;
+import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
@@ -49,8 +51,8 @@ public class CompletionInitializationUtil {
     private static final Logger LOG = Logger.getInstance(CompletionInitializationUtil.class);
 
     public static CompletionInitializationContext createCompletionInitializationContext(@NotNull Project project,
-                                                                                        @NotNull CodeEditor editor,
-                                                                                        @NotNull Cursor caret,
+                                                                                        @NotNull Editor editor,
+                                                                                        @NotNull Caret caret,
                                                                                         int invocationCount,
                                                                                         CompletionType completionType) {
         return WriteCommandAction.runWriteCommandAction(project,
@@ -58,9 +60,9 @@ public class CompletionInitializationUtil {
                     PsiDocumentManager.getInstance(project).commitAllDocuments();
                     CompletionAssertions.checkEditorValid(editor);
 
-                    final PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
-                    //            assert psiFile != null : "no PSI file: " + FileDocumentManager
-                    //            .getInstance().getFile(editor.getDocument());
+                    final PsiFile psiFile = editor.getUserData(EditorMemory.FILE_KEY);
+                                assert psiFile != null : "no PSI file: " + FileDocumentManager
+                                .getInstance().getFile(editor.getDocument());
                     psiFile.putUserData(PsiFileEx.BATCH_REFERENCE_PROCESSING, Boolean.TRUE);
                     CompletionAssertions.assertCommitSuccessful(editor, psiFile);
 
@@ -72,10 +74,10 @@ public class CompletionInitializationUtil {
                 });
     }
 
-    public static CompletionInitializationContext runContributorsBeforeCompletion(CodeEditor editor,
+    public static CompletionInitializationContext runContributorsBeforeCompletion(Editor editor,
                                                                                   PsiFile psiFile,
                                                                                   int invocationCount,
-                                                                                  @NotNull Cursor caret,
+                                                                                  @NotNull Caret caret,
                                                                                   CompletionType completionType) {
         final Ref<CompletionContributor> current = Ref.create(null);
         CompletionInitializationContext context = new CompletionInitializationContext(editor,
@@ -93,8 +95,7 @@ public class CompletionInitializationUtil {
             contributor.beforeCompletion(context);
             CompletionAssertions.checkEditorValid(editor);
             assert !PsiDocumentManager.getInstance(project)
-                    .isUncommited(Objects.requireNonNull(EditorMemory.getUserData(editor,
-                            EditorMemory.DOCUMENT_KEY))) : "Contributor " +
+                    .isUncommited(editor.getDocument()) : "Contributor " +
                                                            contributor +
                                                            " left the document uncommitted";
         }
@@ -113,7 +114,7 @@ public class CompletionInitializationUtil {
         insertedElement.putUserData(CompletionContext.COMPLETION_CONTEXT_KEY, new
         CompletionContext(fileCopy, finalOffsets.getOffsets()));
 
-        EditorMemory.putUserData(initContext.getEditor(), EditorMemory.INSERTED_KEY, insertedElement);
+        initContext.getEditor().putUserData(EditorMemory.INSERTED_KEY, insertedElement);
 
         return new CompletionParameters(insertedElement,
                 originalFile,
@@ -143,8 +144,8 @@ public class CompletionInitializationUtil {
             return () -> topLevelOffsets;
         }
 
-        CodeEditor editor = initContext.getEditor();
-        Document originalDocument = EditorMemory.getUserData(editor, EditorMemory.DOCUMENT_KEY);
+        Editor editor = initContext.getEditor();
+        Document originalDocument = editor.getDocument();
 //        Editor hostEditor = editor instanceof EditorWindow ? ((EditorWindow)editor).getDelegate
 //        () : editor;
         OffsetMap hostMap = topLevelOffsets.getOffsets();
