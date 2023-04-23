@@ -17,16 +17,44 @@ import org.jetbrains.kotlin.com.intellij.util.indexing.roots.IndexableFilesItera
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import kotlin.Unit;
 
 public class ProjectIndexer {
 
-    public static void index(Project project,
-                             CoreFileBasedIndex fileBasedIndex) throws IndexUpdateRunner.IndexingInterruptedException {
+    public static void index(Project project, CoreFileBasedIndex fileBasedIndex) {
         fileBasedIndex.registerProjectFileSets(project);
         fileBasedIndex.getIndexableFilesFilterHolder().getProjectIndexableFiles(project);
 
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+
+        findFilesToIndex(project, fileBasedIndex);
+
+        Collection<VirtualFile> filesToUpdate = fileBasedIndex
+                .getChangedFilesCollector()
+                .getAllFilesToUpdate();
+
+        IndexUpdateRunner.FileSet fileSet = new IndexUpdateRunner.FileSet(
+                project,
+                "files to update",
+                filesToUpdate
+        );
+        IndexUpdateRunner indexUpdateRunner = new IndexUpdateRunner(
+                fileBasedIndex,
+                2
+        );
+        try {
+            indexUpdateRunner.indexFiles(project,
+                    Collections.singletonList(fileSet),
+                    ProgressManager.getInstance().getProgressIndicator());
+        } catch (IndexUpdateRunner.IndexingInterruptedException e) {
+            // ignored for now
+        }
+    }
+
+    private static void findFilesToIndex(Project project, CoreFileBasedIndex fileBasedIndex) {
         UnindexedFilesFinder finder =
                 new UnindexedFilesFinder(project, fileBasedIndex, indexedFile -> false);
 
@@ -36,6 +64,7 @@ public class ProjectIndexer {
 
                 UnindexedFileStatus fileStatus = finder.getFileStatus(fileOrDir);
                 if (fileStatus != null && fileStatus.isShouldIndex()) {
+                    System.out.println("Indexing " + fileOrDir.getName() + " because " + fileStatus.isShouldIndex());
                     ProgressManager.getInstance().computeInNonCancelableSection(() -> {
                         fileBasedIndex.scheduleFileForIndexing(FileIdStorage.getAndStoreId(fileOrDir),
                                 fileOrDir,
@@ -67,16 +96,6 @@ public class ProjectIndexer {
                 }, virtualFile -> true);
             }
         }
-
-        Collection<VirtualFile> filesToUpdate =
-                fileBasedIndex.getChangedFilesCollector().getAllFilesToUpdate();
-        System.out.println("Files to update: " + filesToUpdate.size());
-        IndexUpdateRunner.FileSet fileSet =
-                new IndexUpdateRunner.FileSet(project, "files to update", filesToUpdate);
-        IndexUpdateRunner indexUpdateRunner = new IndexUpdateRunner(fileBasedIndex, 2);
-        indexUpdateRunner.indexFiles(project,
-                Collections.singletonList(fileSet),
-                ProgressManager.getInstance().getProgressIndicator());
     }
 
 }
