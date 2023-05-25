@@ -3,8 +3,9 @@ name: Android CI Release
 on:
 
   pull_request:
-
-  workflow_dispatch:
+      
+      branches: [ "dev", "main" ]
+  workflow_dispatch: {}
 
 jobs:
 
