@@ -3,9 +3,9 @@ name: Android Tests CI
 on:
   workflow_dispatch:
   push:
-    branches: [ javac-17 ]
+    branches: [ psi-rewrite ]
   pull_request:
-    branches: [ javac-17 ]
+    branches: [ psi-rewrite ]
 
 jobs:
   build:
